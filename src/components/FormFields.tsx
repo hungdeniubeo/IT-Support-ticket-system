@@ -1,4 +1,5 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react'
+import { Select } from './Select'
 
 const controlClass = 'w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
 
@@ -44,23 +45,43 @@ export function TextAreaField({ label, id, error, required, hint, className = ''
   )
 }
 
-interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectFieldProps {
   label: string
+  id?: string
+  value: string
+  disabled?: boolean
+  required?: boolean
   error?: string
   options: readonly string[]
   placeholder?: string
+  className?: string
   optionLabel?: (value: string) => string
+  onChange?: (value: string) => void
 }
 
-export function SelectField({ label, id, error, required, options, placeholder = 'Chọn một mục', optionLabel, className = '', ...props }: SelectFieldProps) {
+export function SelectField({ label, id, value, disabled, error, required, options, placeholder = 'Chọn một mục', optionLabel, className = '', onChange }: SelectFieldProps) {
   const inputId = id ?? label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')
+  const colors: Record<string, string> = {
+    new: 'bg-slate-400', investigating: 'bg-blue-500', waiting: 'bg-amber-500', resolved: 'bg-emerald-500', closed: 'bg-slate-400',
+    low: 'bg-slate-400', medium: 'bg-blue-500', high: 'bg-orange-500', critical: 'bg-rose-500',
+  }
+  const selectOptions = options.map((value) => ({ value, label: optionLabel ? optionLabel(value) : value, tone: colors[value] }))
   return (
     <div>
       <FieldLabel htmlFor={inputId} label={label} required={required} />
-      <select id={inputId} required={required} aria-invalid={Boolean(error)} aria-describedby={error ? `${inputId}-error` : undefined} className={`${controlClass} h-10 ${className}`} {...props}>
-        <option value="">{placeholder}</option>
-        {options.map((option) => <option key={option} value={option}>{optionLabel ? optionLabel(option) : option}</option>)}
-      </select>
+      <div className={className}>
+        <Select
+          id={inputId}
+          value={value}
+          options={selectOptions}
+          placeholder={placeholder}
+          required={required}
+          invalid={Boolean(error)}
+          describedBy={error ? `${inputId}-error` : undefined}
+          disabled={disabled}
+          onChange={(next) => onChange?.(next)}
+        />
+      </div>
       <FieldError id={inputId}>{error}</FieldError>
     </div>
   )

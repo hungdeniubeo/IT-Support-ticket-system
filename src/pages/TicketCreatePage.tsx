@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { ArrowLeft, ChevronDown, Plus } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import type { NewTicket, TicketCategory, TicketPriority, TicketStatus } from '../domain/ticket'
@@ -6,8 +6,10 @@ import { TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES } from '../domain
 import { Button } from '../components/Button'
 import { PageHeader } from '../components/PageHeader'
 import { SelectField, TextAreaField, TextField } from '../components/FormFields'
-import { ticketRepository } from '../services/ticketRepository'
+import { ticketRepository } from '../services/activeTicketRepository'
 import { getCategoryLabel, getPriorityLabel, getStatusLabel } from '../lib/labels'
+import { validateNewTicket } from '../domain/ticketValidation'
+import { useToast } from '../components/ToastProvider'
 
 interface TicketFormValues extends Omit<NewTicket, 'category' | 'priority'> {
   category: TicketCategory | ''
@@ -21,8 +23,8 @@ const initialValues: TicketFormValues = {
   title: '',
   description: '',
   category: '',
-  priority: 'Medium',
-  status: 'New',
+  priority: 'medium',
+  status: 'new',
   investigation: '',
   rootCause: '',
   solution: '',
@@ -39,10 +41,12 @@ function isPriority(value: string): value is TicketPriority {
 
 export function TicketCreatePage() {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
 
   function update<K extends keyof TicketFormValues>(key: K, value: TicketFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }))
@@ -51,22 +55,21 @@ export function TicketCreatePage() {
   }
 
   function validate(): FormErrors {
-    const next: FormErrors = {}
-    if (!values.customer.trim()) next.customer = 'Nhập tên khách hàng hoặc tiệm.'
-    if (!values.title.trim()) next.title = 'Nhập tiêu đề ngắn gọn cho vấn đề.'
-    if (!values.description.trim()) next.description = 'Mô tả vấn đề khách hàng gặp phải.'
-    if (!values.category) next.category = 'Chọn danh mục ticket.'
-    if (!values.priority) next.priority = 'Chọn mức độ ưu tiên.'
-    return next
+    return validateNewTicket({
+      ...values,
+      category: values.category as TicketCategory,
+      priority: values.priority as TicketPriority,
+    } as NewTicket)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextErrors = validate()
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
+    if (Object.keys(nextErrors).length || savingRef.current) return
     if (!isCategory(values.category) || !isPriority(values.priority)) return
 
+    savingRef.current = true
     setSaving(true)
     setFormError('')
     try {
@@ -79,9 +82,12 @@ export function TicketCreatePage() {
         priority: values.priority,
         status: values.status as TicketStatus,
       })
+      showToast(`Đã tạo ticket ${ticket.ticketNumber}`)
       navigate(`/tickets/${ticket.ticketNumber}`)
-    } catch {
-      setFormError('Không thể lưu ticket. Vui lòng thử lại.')
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Không thể lưu ticket. Vui lòng thử lại.')
+    } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -99,13 +105,13 @@ export function TicketCreatePage() {
           <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
             <TextField label="Khách hàng / Tiệm" required value={values.customer} onChange={(event) => update('customer', event.target.value)} placeholder="Ví dụ: Veganic Nail Spa" error={errors.customer} autoFocus />
             <TextField label="Tiêu đề vấn đề" required value={values.title} onChange={(event) => update('title', event.target.value)} placeholder="Tóm tắt ngắn gọn vấn đề" error={errors.title} />
-            <SelectField label="Danh mục" required value={values.category} onChange={(event) => update('category', event.target.value as TicketCategory | '')} options={TICKET_CATEGORIES} optionLabel={(value) => getCategoryLabel(value as TicketCategory)} error={errors.category} />
+            <SelectField label="Danh mục" required value={values.category} onChange={(value) => update('category', value as TicketCategory | '')} options={TICKET_CATEGORIES} optionLabel={(value) => getCategoryLabel(value as TicketCategory)} error={errors.category} />
             <div className="grid grid-cols-2 gap-4">
-              <SelectField label="Mức độ ưu tiên" required value={values.priority} onChange={(event) => update('priority', event.target.value as TicketPriority | '')} options={TICKET_PRIORITIES} optionLabel={(value) => getPriorityLabel(value as TicketPriority)} error={errors.priority} />
-              <SelectField label="Trạng thái" value={values.status} onChange={(event) => update('status', event.target.value as TicketStatus)} options={TICKET_STATUSES} optionLabel={(value) => getStatusLabel(value as TicketStatus)} />
+              <SelectField label="Mức độ ưu tiên" required value={values.priority} onChange={(value) => update('priority', value as TicketPriority | '')} options={TICKET_PRIORITIES} optionLabel={(value) => getPriorityLabel(value as TicketPriority)} error={errors.priority} />
+              <SelectField label="Trạng thái" value={values.status} onChange={(value) => update('status', value as TicketStatus)} options={TICKET_STATUSES} optionLabel={(value) => getStatusLabel(value as TicketStatus)} />
             </div>
             <div className="sm:col-span-2">
-              <TextAreaField label="Mô tả" required value={values.description} onChange={(event) => update('description', event.target.value)} placeholder="Khách hàng gặp vấn đề gì? Ghi lại các bước và thông báo lỗi nếu có." error={errors.description} className="min-h-24" />
+              <TextAreaField label="Mô tả" value={values.description} onChange={(event) => update('description', event.target.value)} placeholder="Khách hàng gặp vấn đề gì? Ghi lại các bước và thông báo lỗi nếu có." error={errors.description} className="min-h-24" />
             </div>
           </div>
         </section>

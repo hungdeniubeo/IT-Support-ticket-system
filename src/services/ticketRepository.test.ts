@@ -17,14 +17,14 @@ describe('local ticket repository', () => {
     const firstLoad = await repository.list()
     const secondLoad = await repository.list()
 
-    expect(firstLoad.length).toBeGreaterThanOrEqual(4)
+    expect(firstLoad.tickets.length).toBeGreaterThanOrEqual(4)
     expect(await repository.get('IT-001')).toMatchObject({
       ticketNumber: 'IT-001',
       customer: 'Veganic Nail Spa',
       title: 'Clover không thể kết nối với Nail360',
       category: 'Clover / Payment',
-      priority: 'High',
-      status: 'Resolved',
+      priority: 'high',
+      status: 'resolved',
       rootCause: 'Clover Environment đang được đặt ở chế độ Sandbox.',
     })
     expect(secondLoad).toEqual(firstLoad)
@@ -33,12 +33,38 @@ describe('local ticket repository', () => {
   it('does not repopulate tickets after the user removes all cases', async () => {
     const repository = createLocalTicketRepository(storage, () => new Date(instant))
     const tickets = await repository.list()
-    for (const ticket of tickets) await repository.delete(ticket.id)
+    for (const ticket of tickets.tickets) await repository.delete(ticket.ticketNumber)
 
-    expect(await repository.list()).toEqual([])
+    expect((await repository.list()).tickets).toEqual([])
   })
 
   it('loads existing v1 browser data without replacing it with sample tickets', async () => {
+    const legacyTicket = {
+      id: 'IT-024',
+      ticketNumber: 'IT-024',
+      customer: 'Existing Salon',
+      title: 'Saved issue',
+      description: 'Existing description',
+      category: 'Network',
+      priority: 'medium',
+      status: 'waiting',
+      investigation: '',
+      rootCause: '',
+      solution: '',
+      internalNotes: '',
+      createdAt: '2026-09-20T10:00:00.000Z',
+      updatedAt: '2026-09-20T10:00:00.000Z',
+    }
+    const storedValue = JSON.stringify({ tickets: [legacyTicket], nextTicketNumber: 25 })
+    storage.setItem('it-support-ticket-system:v1', storedValue)
+
+    const repository = createLocalTicketRepository(storage, () => new Date(instant))
+
+    expect((await repository.list()).tickets).toEqual([legacyTicket])
+    expect(storage.getItem('it-support-ticket-system:v1')).toBe(storedValue)
+  })
+
+  it('normalizes PascalCase workflow values for the local fallback without rewriting v1 data', async () => {
     const legacyTicket = {
       id: 'IT-024',
       ticketNumber: 'IT-024',
@@ -57,10 +83,9 @@ describe('local ticket repository', () => {
     }
     const storedValue = JSON.stringify({ tickets: [legacyTicket], nextTicketNumber: 25 })
     storage.setItem('it-support-ticket-system:v1', storedValue)
-
     const repository = createLocalTicketRepository(storage, () => new Date(instant))
 
-    expect(await repository.list()).toEqual([legacyTicket])
+    expect((await repository.list()).tickets[0]).toMatchObject({ priority: 'medium', status: 'waiting' })
     expect(storage.getItem('it-support-ticket-system:v1')).toBe(storedValue)
   })
 
@@ -71,8 +96,8 @@ describe('local ticket repository', () => {
       title: 'Receipt printer is offline',
       description: 'The front desk printer is not responding.',
       category: 'Printer / Hardware',
-      priority: 'Medium',
-      status: 'New',
+      priority: 'medium',
+      status: 'new',
       investigation: '',
       rootCause: '',
       solution: '',
@@ -86,7 +111,7 @@ describe('local ticket repository', () => {
   it('never reuses a ticket number after deleting the latest case', async () => {
     const repository = createLocalTicketRepository(storage, () => new Date(instant))
     const tickets = await repository.list()
-    const latest = tickets.at(-1)
+    const latest = tickets.tickets.at(-1)
     expect(latest).toBeDefined()
     if (!latest) throw new Error('Seeded tickets should exist')
 
@@ -96,20 +121,20 @@ describe('local ticket repository', () => {
       title: 'Receipt printer is offline',
       description: 'The front desk printer is not responding.',
       category: 'Printer / Hardware',
-      priority: 'Medium',
-      status: 'New',
+      priority: 'medium',
+      status: 'new',
       investigation: '',
       rootCause: '',
       solution: '',
       internalNotes: '',
     })
 
-    expect(created.ticketNumber).toBe(`IT-${String(tickets.length + 1).padStart(3, '0')}`)
+    expect(created.ticketNumber).toBe(`IT-${String(tickets.total + 1).padStart(3, '0')}`)
   })
 
   it('preserves identity and creation time while updating a case', async () => {
     const repository = createLocalTicketRepository(storage, () => new Date(instant))
-    const [ticket] = await repository.list()
+    const [ticket] = (await repository.list()).tickets
     if (!ticket) throw new Error('Seeded tickets should exist')
     instant = '2026-09-26T10:00:00.000Z'
 
@@ -123,4 +148,41 @@ describe('local ticket repository', () => {
       updatedAt: instant,
     })
   })
+
+  it('searches ticket number, title, and customer case-insensitively', async () => {
+    const repository = createLocalTicketRepository(storage, () => new Date(instant))
+    const listPage = repository.list as unknown as (query: {
+      search: string
+      page: number
+      pageSize: number
+    }) => Promise<unknown>
+    const result = await listPage({ search: 'clover', page: 1, pageSize: 25 })
+    const tickets = Array.isArray(result) ? result : (result as { tickets: Array<{ ticketNumber: string }> }).tickets
+
+    expect(tickets.map((ticket) => ticket.ticketNumber)).toEqual(['IT-001', 'IT-005'])
+  })
+
+  it('combines status, priority, and category filters', async () => {
+    const repository = createLocalTicketRepository(storage, () => new Date(instant))
+    const listPage = repository.list as unknown as (query: {
+      search: string
+      status: string
+      priority: string
+      category: string
+      page: number
+      pageSize: number
+    }) => Promise<unknown>
+    const result = await listPage({
+      search: '',
+      status: 'waiting',
+      priority: 'high',
+      category: 'Appointment / Booking',
+      page: 1,
+      pageSize: 25,
+    })
+    const tickets = Array.isArray(result) ? result : (result as { tickets: Array<{ ticketNumber: string }> }).tickets
+
+    expect(tickets.map((ticket) => ticket.ticketNumber)).toEqual(['IT-003'])
+  })
+
 })

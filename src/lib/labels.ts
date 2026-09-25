@@ -1,18 +1,18 @@
 import type { TicketCategory, TicketPriority, TicketStatus } from '../domain/ticket'
 
 const statusLabels: Record<TicketStatus, string> = {
-  New: 'Mới',
-  Investigating: 'Đang kiểm tra',
-  Waiting: 'Đang chờ',
-  Resolved: 'Đã xử lý',
-  Closed: 'Đã đóng',
+  new: 'Mới',
+  investigating: 'Đang kiểm tra',
+  waiting: 'Đang chờ',
+  resolved: 'Đã xử lý',
+  closed: 'Đã đóng',
 }
 
 const priorityLabels: Record<TicketPriority, string> = {
-  Low: 'Thấp',
-  Medium: 'Trung bình',
-  High: 'Cao',
-  Critical: 'Khẩn cấp',
+  low: 'Thấp',
+  medium: 'Trung bình',
+  high: 'Cao',
+  critical: 'Khẩn cấp',
 }
 
 const categoryLabels: Record<TicketCategory, string> = {

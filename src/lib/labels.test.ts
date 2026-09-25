@@ -3,7 +3,7 @@ import { getCategoryLabel, getPriorityLabel, getStatusLabel } from './labels'
 
 describe('Vietnamese ticket labels', () => {
   it('translates internal status values for display', () => {
-    expect((['New', 'Investigating', 'Waiting', 'Resolved', 'Closed'] as const).map(getStatusLabel)).toEqual([
+    expect((['new', 'investigating', 'waiting', 'resolved', 'closed'] as const).map(getStatusLabel)).toEqual([
       'Mới',
       'Đang kiểm tra',
       'Đang chờ',
@@ -13,7 +13,7 @@ describe('Vietnamese ticket labels', () => {
   })
 
   it('translates internal priority values for display', () => {
-    expect((['Low', 'Medium', 'High', 'Critical'] as const).map(getPriorityLabel)).toEqual([
+    expect((['low', 'medium', 'high', 'critical'] as const).map(getPriorityLabel)).toEqual([
       'Thấp',
       'Trung bình',
       'Cao',
