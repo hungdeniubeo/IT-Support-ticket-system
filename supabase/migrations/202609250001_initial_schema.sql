@@ -267,8 +267,6 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
-
 drop policy if exists ticket_attachments_select_own on storage.objects;
 create policy ticket_attachments_select_own on storage.objects
   for select to authenticated
